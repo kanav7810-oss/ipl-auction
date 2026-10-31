@@ -47,6 +47,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { TEAMS } from '../data/teams';
 import TextChat from '../components/TextChat';
+import RetainedRtmPanel from '../components/RetainedRtmPanel';
 import PageLoader from '../components/PageLoader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import useRoomServer from '../hooks/useRoomServer';
@@ -978,6 +979,7 @@ const AuctionRoom = () => {
 
    return (
       <div className="h-screen-safe bg-[#0d0d0d] text-white font-sans flex flex-col items-center overflow-hidden">
+         {currentAuction?.isLocal && <RetainedRtmPanel roomTeams={roomTeams} userId={user?.uid} />}
 
          <header className="w-full h-14 compact:h-12 bg-black/40 backdrop-blur-md border-b border-white/5 flex flex-row items-center justify-between px-2.5 sm:px-4 md:px-6 z-50 gap-2 shrink-0">
             <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">

@@ -1,3 +1,4 @@
+import { RETAINED, RTM, RETAINED_IDS } from '../data/myAuction.js';
 import { IPL_PLAYERS } from '../data/players.js';
 import { evaluateBotBid } from './botEngine.js';
 import { toFiniteNumber } from './auctionDisplay.js';
@@ -148,6 +149,7 @@ export function generateLocalPlayerOrder(auctionType = 'mega') {
   const nonMarqueeIndicesByRole = {};
 
   IPL_PLAYERS.forEach((p, i) => {
+    if (RETAINED_IDS.has(p.id)) return;
     if (p.set.includes('Marquee')) {
       marqueeIndices.push(i);
     } else {
@@ -158,7 +160,7 @@ export function generateLocalPlayerOrder(auctionType = 'mega') {
 
   const selectedPlayersByRole = new Set(marqueeIndices);
   const nonMarqueeTarget = Math.max(0, targetPlayers - marqueeIndices.length);
-  const nonMarqueeTotal = IPL_PLAYERS.length - marqueeIndices.length;
+  const nonMarqueeTotal = Object.values(nonMarqueeIndicesByRole).reduce((total, indices) => total + indices.length, 0);
   const fraction = nonMarqueeTotal > 0 ? nonMarqueeTarget / nonMarqueeTotal : 1;
 
   Object.keys(nonMarqueeIndicesByRole).forEach((roleName) => {
@@ -183,6 +185,16 @@ export function generateLocalPlayerOrder(auctionType = 'mega') {
   return randomizedIndices;
 }
 
+export function seedSide(hostId, team) {
+  const side = team.userId === hostId ? 'me' : 'friend';
+  return {
+    ...team,
+    side,
+    rtm: team.rtm || { eligible: [...RTM[side]], used: null },
+    squad: team.squad?.length ? team.squad : RETAINED[side].map(id => ({ id, bid: 0, retained: true })),
+  };
+}
+
 /**
  * Create a new offline hotspot room.
  */
@@ -193,8 +205,10 @@ export function createLocalRoom(
   auctionType = 'mega',
   isPublic = false,
 ) {
-  const isSprint5 = auctionType === 'sprint5';
-  const isSprint11 = auctionType === 'sprint11';
+  auctionType = 'mega';
+  isPublic = false;
+  const isSprint5 = false;
+  const isSprint11 = false;
   const budget = isSprint5 ? 60.0 : isSprint11 ? 90.0 : 120.0;
   const squadLimit = isSprint5 ? 5 : isSprint11 ? 11 : 25;
   const overseasLimit = isSprint5 ? 2 : isSprint11 ? 4 : 8;
@@ -205,7 +219,7 @@ export function createLocalRoom(
   const initialTeams = {};
   if (playerDetails.team) {
     const teamDocId = `${roomId}_${userId}`;
-    initialTeams[teamDocId] = {
+    initialTeams[teamDocId] = seedSide(userId, {
       id: teamDocId,
       auctionId: roomId,
       userId,
@@ -214,7 +228,7 @@ export function createLocalRoom(
       budgetRemaining: budget,
       spent: 0,
       squad: [],
-    };
+    });
   }
 
   const roomData = {
@@ -318,7 +332,9 @@ export async function joinLocalRoomDb(roomId, userId, playerDetails) {
 
   const existingPlayers = room.players || [];
   const playerIndex = existingPlayers.findIndex((p) => p.id === userId);
-  const isHost = room.hostId === userId || existingPlayers.length === 0;
+  const isHost = room.hostId === userId;
+  if (playerIndex < 0 && existingPlayers.length >= 2) throw new Error('This room already has two players.');
+  if (playerDetails?.team && existingPlayers.some(p => p.id !== userId && p.team === playerDetails.team)) throw new Error('This team is already taken.');
 
   const playerObj = {
     id: userId,
@@ -342,7 +358,7 @@ export async function joinLocalRoomDb(roomId, userId, playerDetails) {
     const teamDocId = `${roomId}_${userId}`;
     if (!room.teams[teamDocId]) {
       const budget = toFiniteNumber(room.settings?.budget, 120.0);
-      room.teams[teamDocId] = {
+      room.teams[teamDocId] = seedSide(room.hostId, {
         id: teamDocId,
         auctionId: roomId,
         userId,
@@ -351,7 +367,9 @@ export async function joinLocalRoomDb(roomId, userId, playerDetails) {
         budgetRemaining: budget,
         spent: 0,
         squad: [],
-      };
+      });
+    } else {
+      room.teams[teamDocId] = seedSide(room.hostId, room.teams[teamDocId]);
     }
   }
 
@@ -369,6 +387,7 @@ export function updateLocalPlayerTeam(roomId, userId, newTeamId) {
   const room = readLocalRoom(roomId);
   if (!room) return;
 
+  if ((room.players || []).some(p => p.id !== userId && p.team === newTeamId)) throw new Error('This team is already taken.');
   const teamDetails = TEAMS.find((t) => t.id === newTeamId);
   const budget = toFiniteNumber(room.settings?.budget, 120.0);
 
@@ -387,7 +406,8 @@ export function updateLocalPlayerTeam(roomId, userId, newTeamId) {
   const existingTeam = room.teams ? room.teams[teamDocId] : null;
 
   if (!room.teams) room.teams = {};
-  room.teams[teamDocId] = {
+  room.teams[teamDocId] = seedSide(room.hostId, {
+    ...existingTeam,
     id: teamDocId,
     auctionId: roomId,
     userId,
@@ -396,7 +416,7 @@ export function updateLocalPlayerTeam(roomId, userId, newTeamId) {
     budgetRemaining: existingTeam?.budgetRemaining ?? budget,
     spent: existingTeam?.spent ?? 0,
     squad: existingTeam?.squad || [],
-  };
+  });
 
   writeLocalRoom(roomId, room);
 }
@@ -408,44 +428,7 @@ export function fillLocalEmptyTeamsWithBots(roomId) {
   const room = readLocalRoom(roomId);
   if (!room) return;
 
-  const existingPlayers = room.players || [];
-  const takenTeamIds = new Set(existingPlayers.map((p) => p.team).filter(Boolean));
-  const defaultBudget = toFiniteNumber(room.settings?.budget, 120.0);
-
-  if (!room.teams) room.teams = {};
-
-  TEAMS.forEach((t) => {
-    if (!takenTeamIds.has(t.id)) {
-      const botUserId = `bot_${t.id}`;
-      const botName = `${t.name} Bot`;
-      existingPlayers.push({
-        id: botUserId,
-        name: botName,
-        team: t.id,
-        teamName: t.name,
-        isHost: false,
-        isBot: true,
-        isOnline: true,
-        spent: 0,
-        squadCount: 0,
-      });
-
-      const teamDocId = `${roomId}_${botUserId}`;
-      room.teams[teamDocId] = {
-        id: teamDocId,
-        auctionId: roomId,
-        userId: botUserId,
-        teamId: t.id,
-        teamName: t.name,
-        budgetRemaining: defaultBudget,
-        spent: 0,
-        squad: [],
-      };
-    }
-  });
-
-  room.players = existingPlayers;
-  writeLocalRoom(roomId, room);
+  throw new Error('Bots are disabled in two-player LAN rooms.');
 }
 
 /**
@@ -471,6 +454,7 @@ export function startLocalAuction(roomId) {
   const room = readLocalRoom(roomId);
   if (!room) return;
 
+  if (room.players?.length !== 2 || room.players.some(p => p.isBot || !p.team) || Object.keys(room.teams || {}).length !== 2) throw new Error('Two players must choose teams before starting.');
   const playerOrder = generateLocalPlayerOrder(room.auctionType || 'mega');
   const firstPlayer = IPL_PLAYERS[playerOrder[0]];
 

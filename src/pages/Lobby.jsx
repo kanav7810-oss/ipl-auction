@@ -221,7 +221,7 @@ const Lobby = () => {
         navigate(withServerParam(`/auction/${id}`, server));
       } catch (error) {
         console.error('[lobby] Failed to start auction', error);
-        setActionError('Could not start the auction. Please try again.');
+        setActionError(error.message || 'Could not start the auction. Please try again.');
         setIsStarting(false);
       }
     }
@@ -585,14 +585,14 @@ const Lobby = () => {
 
         {isAdmin && (
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
+            {server !== 'local' && !isHotspotRoomCode(id) && <button
               onClick={() => fillEmptyTeamsWithBots(id)}
               className="shrink-0 px-2.5 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
               title="Add AI Bots to unassigned franchises"
             >
               <Zap size={12} className="text-orange-400 shrink-0 sm:w-[14px] sm:h-[14px]" />
               <span>Fill Bots</span>
-            </button>
+            </button>}
             <button
               onClick={handleStartAuction}
               disabled={isStarting}

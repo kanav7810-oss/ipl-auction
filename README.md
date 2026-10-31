@@ -140,3 +140,9 @@ Join the discussion, follow updates, or start a conversation in GitHub Issues.
 
 ## License
 Crick Auction is available under the Apache License 2.0.
+
+## Two-player LAN auction
+
+Run `npm install` and `npm run dev` on the host computer. Connect both devices to the same Wi-Fi or hotspot and open the `Network:` URL printed by Vite on each device. Choose **Offline / Hotspot**; the host creates a room and the friend joins using its code. Choose different teams and start when both have joined. Local rooms use the mega auction, a ₹120 Cr purse per side, no bots, and the preset retained squads. Retentions cost nothing; the Retained & RTM drawer shows the squads and RTM eligibility. RTM is informational and does not automatically match bids. Shikhar Dhawan is omitted because he is absent from the player data.
+
+The Vite bridge keeps rooms in memory while the dev server runs. Everyone who can reach the host and knows a room code can access that room; use a trusted network.

@@ -1,6 +1,9 @@
+import { IPL_PLAYERS } from '../src/data/players.js';
+import { RETAINED, RETAINED_IDS, RTM } from '../src/data/myAuction.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  generateLocalPlayerOrder,
   createLocalRoom,
   readLocalRoom,
   joinLocalRoomDb,
@@ -30,13 +33,13 @@ test('createLocalRoom creates a room with valid initial data', () => {
   assert.ok(room);
   assert.equal(room.id, roomId);
   assert.equal(room.hostId, 'user_123');
-  assert.equal(room.squadLimit, 5);
-  assert.equal(room.overseasLimit, 2);
-  assert.equal(room.settings.budget, 60.0);
+  assert.equal(room.squadLimit, 25);
+  assert.equal(room.overseasLimit, 8);
+  assert.equal(room.settings.budget, 120.0);
   assert.equal(room.players.length, 1);
   assert.equal(room.players[0].team, 'MI');
   assert.ok(room.teams[`${roomId}_user_123`]);
-  assert.equal(room.teams[`${roomId}_user_123`].budgetRemaining, 60.0);
+  assert.equal(room.teams[`${roomId}_user_123`].budgetRemaining, 120.0);
 });
 
 test('joinLocalRoomDb adds new manager to local room', () => {
@@ -54,35 +57,38 @@ test('joinLocalRoomDb adds new manager to local room', () => {
   assert.equal(room.teams[`${roomId}_user_guest`].budgetRemaining, 120.0);
 });
 
-test('fillLocalEmptyTeamsWithBots fills remaining teams up to 10 teams', () => {
-  const roomId = 'HOTSPOT-TEST3';
-  createLocalRoom(roomId, 'user_host', { name: 'Host', team: 'MI' }, 'mega');
-
-  fillLocalEmptyTeamsWithBots(roomId);
-
-  const room = readLocalRoom(roomId);
-  assert.equal(room.players.length, 10);
-  assert.equal(Object.keys(room.teams).length, 10);
-  assert.ok(room.players.some((p) => p.isBot && p.team === 'CSK'));
+test('local rooms reject bots and a third player', async () => {
+  const roomId = 'HOTSPOT-LIMIT';
+  createLocalRoom(roomId, 'host', { team: 'MI' });
+  assert.throws(() => fillLocalEmptyTeamsWithBots(roomId), /disabled/);
+  await joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
+  await assert.rejects(joinLocalRoomDb(roomId, 'third', { team: 'RCB' }), /two players/);
 });
 
-test('removeLocalBotTeam removes a bot player and team', () => {
-  const roomId = 'HOTSPOT-TEST4';
-  createLocalRoom(roomId, 'user_host', { name: 'Host', team: 'MI' }, 'mega');
-  fillLocalEmptyTeamsWithBots(roomId);
-
-  removeLocalBotTeam(roomId, 'bot_CSK');
-
+test('retained players are seeded and excluded from the auction', async () => {
+  const order = generateLocalPlayerOrder();
+  assert.equal(order.length, IPL_PLAYERS.length - RETAINED_IDS.size);
+  assert.ok(order.every(index => !RETAINED_IDS.has(IPL_PLAYERS[index].id)));
+  const roomId = 'HOTSPOT-RETAINED';
+  createLocalRoom(roomId, 'host', { team: 'MI' });
+  await joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
   const room = readLocalRoom(roomId);
-  assert.equal(room.players.length, 9);
-  assert.equal(room.players.some((p) => p.id === 'bot_CSK'), false);
-  assert.equal(room.teams[`${roomId}_bot_CSK`], undefined);
+  for (const [user, side] of [['host', 'me'], ['guest', 'friend']]) {
+    const team = room.teams[`${roomId}_${user}`];
+    assert.equal(team.side, side);
+    assert.deepEqual(team.squad, RETAINED[side].map(id => ({ id, bid: 0, retained: true })));
+    assert.deepEqual(team.rtm, { eligible: RTM[side], used: null });
+    assert.equal(team.budgetRemaining, 120);
+  }
+  updateLocalPlayerTeam(roomId, 'host', 'RCB');
+  assert.deepEqual(readLocalRoom(roomId).teams[`${roomId}_host`].squad.map(p => p.id), RETAINED.me);
 });
 
 test('startLocalAuction transitions room to active and sets live bidding', () => {
   const roomId = 'HOTSPOT-TEST5';
   createLocalRoom(roomId, 'user_host', { name: 'Host', team: 'MI' }, 'mega');
 
+  joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
   startLocalAuction(roomId);
 
   const room = readLocalRoom(roomId);
@@ -96,6 +102,7 @@ test('startLocalAuction transitions room to active and sets live bidding', () =>
 test('placeLocalBid updates currentBid, highBidder, and extends timer', () => {
   const roomId = 'HOTSPOT-TEST6';
   createLocalRoom(roomId, 'user_host', { name: 'Host', team: 'MI' }, 'mega');
+  joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
   startLocalAuction(roomId);
 
   const room = placeLocalBid(
@@ -115,6 +122,7 @@ test('placeLocalBid updates currentBid, highBidder, and extends timer', () => {
 test('pauseLocalAuction, resumeLocalAuction, and endLocalAuction manage room lifecycle', () => {
   const roomId = 'HOTSPOT-TEST7';
   createLocalRoom(roomId, 'user_host', { name: 'Host', team: 'MI' }, 'mega');
+  joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
   startLocalAuction(roomId);
 
   pauseLocalAuction(roomId);
