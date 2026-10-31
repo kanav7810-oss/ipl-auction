@@ -14,7 +14,7 @@ export default function RetainedRtmPanel({ roomTeams, userId }) {
         <div className="flex items-center justify-between"><h2 className="text-xl font-bold">Retained &amp; RTM</h2><button className="rounded-lg p-2" onClick={() => setOpen(false)} aria-label="Close">✕</button></div>
         <p className="mt-2 text-sm text-gray-400">RTM is display-only; players remain in the auction pool.</p>
         {teams.map((team, index) => <section key={index} className="mt-5 rounded-xl border border-white/10 p-4">
-          <h3 className="font-bold">{index === 0 ? 'Me · Host' : 'Friend · Joiner'} {team?.userId === userId ? '(you)' : ''}{team ? ` — ${team.teamName}` : ' — waiting'}</h3>
+          <h3 className="font-bold">{index === 0 ? 'Team A · Kohli' : 'Team B · Dhawan'} {team?.userId === userId ? '(you)' : ''}{team ? ` — ${team.teamName}` : ' — waiting'}</h3>
           {team && <>
             <p className="mt-2 text-sm text-gray-300">Purse ₹{team.budgetRemaining} Cr · Squad {team.squad?.length || 0} · RTM {team.rtm?.used ? `used (${names.get(team.rtm.used) || team.rtm.used})` : 'available'}</p>
             <h4 className="mt-4 font-semibold">Retained</h4><ul className="text-sm text-gray-300">{team.squad?.filter(p => p.retained).map(p => <li key={p.id}>{names.get(p.id)}</li>)}</ul>

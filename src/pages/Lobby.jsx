@@ -1,3 +1,4 @@
+import { LAN_TEAMS } from '../data/lanTeams';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -87,6 +88,8 @@ const Lobby = () => {
 
   const isAdmin = currentAuction?.hostId === user?.uid;
   const players = currentAuction?.players || [];
+  const isLocalRoom = server === 'local' || isHotspotRoomCode(id);
+  const selectableTeams = isLocalRoom ? LAN_TEAMS.map(option => ({ ...TEAMS.find(team => team.id === option.id), ...option })) : TEAMS;
 
   const teamAssignments = players.reduce((acc, p) => {
     if (p.team) acc[p.team] = p.name;
@@ -252,7 +255,7 @@ const Lobby = () => {
         setBanError(e.message);
       } else {
         console.error('[lobby] Failed to select team', e);
-        setActionError('Could not join that team. Please try again.');
+        setActionError(e.message || 'Could not join that team. Please try again.');
       }
     } finally {
       setIsSelectingTeam(null);
@@ -486,11 +489,12 @@ const Lobby = () => {
         >
           <div className="text-center mb-16">
             <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter mb-4">Select Your Squad</h1>
-            <p className="text-gray-500 font-bold text-xs uppercase tracking-[0.3em]">Choose a vacant franchise to enter the auction hub</p>
+            <p className="text-gray-500 font-bold text-xs uppercase tracking-[0.3em]">{isLocalRoom ? "Choose an available team to enter the auction hub" : "Choose a vacant franchise to enter the auction hub"}</p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-            {TEAMS.map((team) => {
+          {actionError && <p role="alert" className="mb-4 text-center text-red-400">{actionError}</p>}
+          <div className={`grid grid-cols-2 ${isLocalRoom ? "max-w-2xl mx-auto" : "sm:grid-cols-3 md:grid-cols-5"} gap-4`}>
+            {selectableTeams.map((team) => {
               const isTaken = teamAssignments[team.id];
               return (
                 <button
@@ -506,7 +510,8 @@ const Lobby = () => {
                     {isSelectingTeam === team.id ? <Loader2 className="animate-spin text-orange-500" /> : <img src={team.logo} alt={`${team.name || team.id} Logo`} className="w-full h-full object-contain" />}
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white">{team.id}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white">{team.label || team.id}</p>
+                    {team.description && <p className="mt-2 text-xs text-gray-300 normal-case tracking-normal">{team.description}</p>}
                     <p className="text-[8px] font-bold uppercase tracking-widest text-gray-500 mt-1">{isTaken ? (isTaken.split(' ')[0]) : 'Available'}</p>
                   </div>
                 </button>
@@ -666,7 +671,7 @@ const Lobby = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Claim Franchise</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">{isLocalRoom ? 'Choose Team' : 'Claim Franchise'}</h3>
                 </div>
                 {currentUserPlayer?.team && (
                   <div className="text-[9px] font-black text-green-500 bg-green-500/10 px-2 py-0.5 rounded uppercase tracking-wider">Locked In</div>
@@ -674,7 +679,7 @@ const Lobby = () => {
               </div>
 
               <div className="grid grid-cols-5 gap-2.5">
-                {TEAMS.map((team) => {
+                {selectableTeams.map((team) => {
                   const isTaken = teamAssignments[team.id];
                   const isMine = currentUserPlayer?.team === team.id;
 
@@ -701,7 +706,7 @@ const Lobby = () => {
                       </div>
 
                       <span className={`text-[8px] font-black uppercase text-center tracking-tighter truncate w-full ${isMine ? 'text-white' : 'text-gray-500'}`}>
-                        {isTaken ? isTaken.split(' ')[0] : team.id}
+                        {team.label || (isTaken ? isTaken.split(' ')[0] : team.id)}
                       </span>
                     </button>
                   );

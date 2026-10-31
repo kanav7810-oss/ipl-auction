@@ -23,6 +23,7 @@ import {
 } from "../lib/auctionServers";
 import { IPL_PLAYERS } from "../data/players";
 import { TEAMS } from "../data/teams";
+import { LAN_TEAMS } from "../data/lanTeams";
 import {
   Zap,
   Loader2,
@@ -62,6 +63,7 @@ const LandingPage = () => {
     "Play the ultimate multiplayer IPL Auction Simulator online. Host live IPL Mega Auctions with friends, manage purse budgets, bid on top T20 players, and build championship squads!",
   );
   const [selectedTeam, setSelectedTeam] = useState("MI");
+  const [selectedLanTeam, setSelectedLanTeam] = useState("RCB");
   const [activeTab, setActiveTab] = useState("new");
   const [hostingType, setHostingType] = useState(() => {
     if (typeof window !== "undefined") {
@@ -444,18 +446,14 @@ const LandingPage = () => {
       if (activeTab === "new") {
         if (hostingType === "hotspot") {
           const localRoomId = `HOTSPOT-${generateRoomCode(4)}`;
-          try {
-            await createRoom(
+          await createRoom(
               localRoomId,
               user.uid,
-              { name: displayName, team: selectedTeam },
+              { name: displayName, team: selectedLanTeam },
               auctionType,
               false,
               'local',
             );
-          } catch {
-            // non-fatal
-          }
           setIsSubmitting(false);
           navigate(`/lobby/${localRoomId}?local=true&server=local`);
           return;
@@ -910,7 +908,10 @@ const LandingPage = () => {
                   </button>
                 </div>
 
-                <div>
+                {hostingType === "hotspot" ? <div>
+                  <h2 className="mb-3 text-sm font-bold text-gray-300">Choose your team</h2>
+                  <div className="grid grid-cols-2 gap-3">{LAN_TEAMS.map(t => <button type="button" key={t.id} onClick={() => setSelectedLanTeam(t.id)} aria-pressed={selectedLanTeam === t.id} className={`rounded-xl border p-4 text-left ${selectedLanTeam === t.id ? "border-orange-500 bg-orange-500/10" : "border-white/10 bg-white/5"}`}><span className="block font-bold text-white">{t.label}</span><span className="mt-2 block text-xs text-gray-300">{t.description}</span></button>)}</div>
+                </div> : <div>
                   <div className="mb-2.5 sm:mb-4 ml-1">
                     <h2 className="text-[11px] sm:text-[13px] font-black uppercase text-gray-400 tracking-wider">
                       Franchise
@@ -959,7 +960,7 @@ const LandingPage = () => {
                       </button>
                     ))}
                   </div>
-                </div>
+                </div>}
 
                 <div>
                   <div className="mb-2.5 sm:mb-4 ml-1">

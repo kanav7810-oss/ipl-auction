@@ -1,3 +1,4 @@
+import { LAN_TEAMS } from '../data/lanTeams.js';
 import { RETAINED, RTM, RETAINED_IDS } from '../data/myAuction.js';
 import { IPL_PLAYERS } from '../data/players.js';
 import { evaluateBotBid } from './botEngine.js';
@@ -178,12 +179,13 @@ export function generateLocalPlayerOrder(auctionType = 'mega') {
 }
 
 export function seedSide(hostId, team) {
-  const side = team.userId === hostId ? 'me' : 'friend';
+  const side = LAN_TEAMS.find(option => option.id === team.teamId)?.side || (team.userId === hostId ? 'me' : 'friend');
+  const sideChanged = team.side && team.side !== side;
   return {
     ...team,
     side,
-    rtm: team.rtm || { eligible: [...RTM[side]], used: null },
-    squad: team.squad?.length ? team.squad : RETAINED[side].map(id => ({ id, bid: 0, retained: true })),
+    rtm: !sideChanged && team.rtm ? team.rtm : { eligible: [...RTM[side]], used: null },
+    squad: !sideChanged && team.squad?.length ? team.squad : RETAINED[side].map(id => ({ id, bid: 0, retained: true })),
   };
 }
 
@@ -379,6 +381,8 @@ export function updateLocalPlayerTeam(roomId, userId, newTeamId) {
   const room = readLocalRoom(roomId);
   if (!room) return;
 
+  if (room.status !== 'waiting') throw new Error('Teams cannot be changed after the auction starts.');
+  if (!LAN_TEAMS.some(t => t.id === newTeamId)) throw new Error('Choose Team A or Team B.');
   if ((room.players || []).some(p => p.id !== userId && p.team === newTeamId)) throw new Error('This team is already taken.');
   const teamDetails = TEAMS.find((t) => t.id === newTeamId);
   const budget = toFiniteNumber(room.settings?.budget, 120.0);

@@ -189,3 +189,28 @@ test('both set-skip votes defer the rest of the current set', async () => {
     assert.deepEqual(readLocalRoom(roomId).unsoldIndices, [first, same]);
   } finally { globalThis.setTimeout = originalSetTimeout; }
 });
+
+test('team selection determines retained and RTM lists independently of host', async () => {
+  const roomId = 'HOTSPOT-TEAMS';
+  createLocalRoom(roomId, 'host', { team: 'PBKS' });
+  await joinLocalRoomDb(roomId, 'guest', { team: 'RCB' });
+  let room = readLocalRoom(roomId);
+  assert.equal(room.teams[`${roomId}_host`].side, 'friend');
+  assert.deepEqual(room.teams[`${roomId}_host`].squad.map(p => p.id), RETAINED.friend);
+  assert.deepEqual(room.teams[`${roomId}_host`].rtm.eligible, RTM.friend);
+  assert.equal(room.teams[`${roomId}_guest`].side, 'me');
+  assert.deepEqual(room.teams[`${roomId}_guest`].squad.map(p => p.id), RETAINED.me);
+  assert.throws(() => updateLocalPlayerTeam(roomId, 'host', 'RCB'), /already taken/);
+  assert.deepEqual(readLocalRoom(roomId).teams[`${roomId}_host`].squad.map(p => p.id), RETAINED.friend);
+});
+
+test('changing sides before the other team joins replaces retained and RTM lists', () => {
+  const roomId = 'HOTSPOT-CHANGE-TEAM';
+  createLocalRoom(roomId, 'host', { team: 'RCB' });
+  updateLocalPlayerTeam(roomId, 'host', 'PBKS');
+  const team = readLocalRoom(roomId).teams[`${roomId}_host`];
+  assert.equal(team.side, 'friend');
+  assert.deepEqual(team.squad.map(p => p.id), RETAINED.friend);
+  assert.deepEqual(team.rtm.eligible, RTM.friend);
+  assert.equal(team.budgetRemaining, 120);
+});
