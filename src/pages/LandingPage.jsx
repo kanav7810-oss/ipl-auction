@@ -911,6 +911,8 @@ const LandingPage = () => {
                 {hostingType === "hotspot" ? <div>
                   <h2 className="mb-3 text-sm font-bold text-gray-300">Choose your team</h2>
                   <div className="grid grid-cols-2 gap-3">{LAN_TEAMS.map(t => <button type="button" key={t.id} onClick={() => setSelectedLanTeam(t.id)} aria-pressed={selectedLanTeam === t.id} className={`rounded-xl border p-4 text-left ${selectedLanTeam === t.id ? "border-orange-500 bg-orange-500/10" : "border-white/10 bg-white/5"}`}><span className="block font-bold text-white">{t.label}</span><span className="mt-2 block text-xs text-gray-300">{t.description}</span></button>)}</div>
+                  <button type="submit" disabled={isSubmitting} className="mt-4 w-full rounded-xl bg-orange-600 px-4 py-4 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50">{isSubmitting ? "Creating room…" : "Create Hotspot Room"}</button>
+                  <p className="mt-2 text-xs text-gray-400">Share the room code, then start once both players have joined.</p>
                 </div> : <div>
                   <div className="mb-2.5 sm:mb-4 ml-1">
                     <h2 className="text-[11px] sm:text-[13px] font-black uppercase text-gray-400 tracking-wider">
@@ -962,7 +964,7 @@ const LandingPage = () => {
                   </div>
                 </div>}
 
-                <div>
+                {hostingType === "cloud" && <div>
                   <div className="mb-2.5 sm:mb-4 ml-1">
                     <h2 className="text-[11px] sm:text-[13px] font-black uppercase text-gray-400 tracking-wider">
                       Mode
@@ -1092,6 +1094,8 @@ const LandingPage = () => {
                   </div>
                 </div>
 
+                }
+
                 {/* Room Visibility Toggle (Cloud Only) */}
                 {hostingType === "cloud" ? (
                   <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-between gap-3">
@@ -1135,7 +1139,7 @@ const LandingPage = () => {
                   </div>
                 )}
 
-                <div className="pt-1 sm:pt-2">
+                {hostingType === "cloud" && <div className="pt-1 sm:pt-2">
                   <button
                     type="submit"
                     disabled={isSubmitting}
@@ -1164,7 +1168,7 @@ const LandingPage = () => {
                     </div>
                   </button>
                 
-                </div>
+                </div>}
               </form>
             )}
 

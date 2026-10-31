@@ -588,7 +588,7 @@ const Lobby = () => {
           )}
         </div>
 
-        {isAdmin && (
+        {isAdmin && !isLocalRoom && (
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {server !== 'local' && !isHotspotRoomCode(id) && <button
               onClick={() => fillEmptyTeamsWithBots(id)}
@@ -612,6 +612,10 @@ const Lobby = () => {
           </div>
         )}
       </div>
+
+      {isLocalRoom && <div className="relative z-20 mb-4 w-full max-w-6xl rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
+        {isAdmin ? <><button onClick={handleStartAuction} disabled={isStarting || players.length !== 2 || players.some(p => !p.team)} className="w-full rounded-xl bg-orange-600 px-4 py-4 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50">{isStarting ? 'Starting…' : 'Start Auction'}</button><p className="mt-2 text-center text-xs text-gray-300">{players.length === 2 && players.every(p => p.team) ? 'Both teams are ready.' : 'Waiting for your friend to join and choose the other team.'}</p></> : <p className="text-center text-sm text-gray-200">Waiting for the host to start the auction.</p>}
+      </div>}
 
       <motion.div
         {...enterProps({ opacity: 0, y: 30 }, { transition: { delay: 0.1 } })}
