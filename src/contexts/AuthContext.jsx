@@ -49,6 +49,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    if (!auth) {
+      const saved = localStorage.getItem('ipl_local_user');
+      if (saved) setUser(JSON.parse(saved));
+      markLoaderSeen();
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       const isLandingPage = typeof window !== 'undefined' && window.location.pathname === '/';
@@ -71,18 +77,30 @@ export const AuthProvider = ({ children }) => {
 
 
   const loginWithGoogle = async () => {
+    if (!auth) throw new Error('Google sign-in requires Firebase configuration. Use offline guest mode.');
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   };
 
   const loginAsGuest = async (displayName) => {
+    if (!auth) {
+      const existing = localStorage.getItem('ipl_local_user');
+      const localUser = { uid: existing ? JSON.parse(existing).uid : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''), displayName, isAnonymous: true };
+      localStorage.setItem('ipl_local_user', JSON.stringify(localUser));
+      setUser(localUser);
+      return localUser;
+    }
     const result = await signInAnonymously(auth);
     await updateProfile(result.user, { displayName });
     setUser({ ...result.user, displayName });
     return result.user;
   };
 
-  const logout = () => signOut(auth);
+  const logout = () => {
+    if (auth) return signOut(auth);
+    localStorage.removeItem('ipl_local_user');
+    setUser(null);
+  };
 
   const value = {
     user,

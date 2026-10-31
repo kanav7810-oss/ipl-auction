@@ -21,9 +21,10 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
+export const firebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+const app = initializeApp(firebaseConfigured ? firebaseConfig : { apiKey: "offline", projectId: "offline-auction", appId: "offline" });
 
-export const auth = getAuth(app);
+export const auth = firebaseConfigured ? getAuth(app) : null;
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -31,7 +32,7 @@ export const db = initializeFirestore(app, {
 });
 // Defer Analytics until after first paint — removes it from the critical path
 let analytics = null;
-if (typeof window !== 'undefined') {
+if (firebaseConfigured && typeof window !== 'undefined') {
   window.addEventListener('load', () => {
     import('firebase/analytics').then(({ getAnalytics }) => {
       analytics = getAnalytics(app);
@@ -95,7 +96,7 @@ function createOverrideDatabase(databaseURL, appName, envPrefix) {
   }
 }
 
-const primaryRtdb   = createOverrideDatabase(primaryDatabaseURL,   PRIMARY_APP_NAME,   'VITE_RTDB_A') || getDatabase(app);
+const primaryRtdb   = createOverrideDatabase(primaryDatabaseURL, PRIMARY_APP_NAME, 'VITE_RTDB_A') || (firebaseConfigured ? getDatabase(app) : null);
 const secondaryRtdb = createOverrideDatabase(secondaryDatabaseURL, SECONDARY_APP_NAME, 'VITE_RTDB_B');
 
 export const SECONDARY_SERVER_ENABLED = Boolean(secondaryRtdb);
@@ -140,7 +141,7 @@ export function getActiveServer() {
 // No database is connected while the user is browsing the landing page,
 // public lobby or history. Only room entry calls goOnlineServer().
 try {
-  goOffline(primaryRtdb);
+  if (primaryRtdb) goOffline(primaryRtdb);
   if (secondaryRtdb) goOffline(secondaryRtdb);
 } catch {
   // Offline mode is a courtesy; the SDK reconnects automatically when asked.
