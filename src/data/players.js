@@ -1,4 +1,14 @@
 export const IPL_PLAYERS = [
+  {"id": "p_lan_dhawan", "name": "Shikhar Dhawan", "role": "Batsman", "type": "Indian", "country": "IND", "basePrice": 2, "set": "Marquee Set 1", "image": "https://www.punjabkingsipl.in/static-assets/images/players/3722.png", "stats": {}, "rating": 75},
+  {"id": "p_lan_maxwell", "name": "Glenn Maxwell", "role": "All-Rounder", "type": "Overseas", "country": "AUS", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_russell", "name": "Andre Russell", "role": "All-Rounder", "type": "Overseas", "country": "WI", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_faf", "name": "Faf du Plessis", "role": "Batsman", "type": "Overseas", "country": "SA", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_moeen", "name": "Moeen Ali", "role": "All-Rounder", "type": "Overseas", "country": "ENG", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_ashwin", "name": "Ravichandran Ashwin", "role": "All-Rounder", "type": "Indian", "country": "IND", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_warner", "name": "David Warner", "role": "Batsman", "type": "Overseas", "country": "AUS", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_stokes", "name": "Ben Stokes", "role": "All-Rounder", "type": "Overseas", "country": "ENG", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+  {"id": "p_lan_brook", "name": "Harry Brook", "role": "Batsman", "type": "Overseas", "country": "ENG", "basePrice": 2, "set": "Marquee Set 1", "image": "", "stats": {}, "rating": 75},
+
   {
     "id": "p_621",
     "name": "Jasprit Bumrah",

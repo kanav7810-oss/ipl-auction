@@ -1,7 +1,7 @@
-// IDs verified against players.js; Shikhar Dhawan is absent. MS Dhoni is listed as Mahendra Singh Dhoni.
+// IDs verified against players.js; MS Dhoni is listed as Mahendra Singh Dhoni.
 export const RETAINED = {
   me: ['p_137', 'p_142', 'p_104', 'p_138', 'p_621'],
-  friend: ['p_622', 'p_125', 'p_103', 'p_140'],
+  friend: ['p_lan_dhawan', 'p_622', 'p_125', 'p_103', 'p_140'],
 };
 export const RTM = {
   me: ['p_115', 'p_128', 'p_135', 'p_154', 'p_168', 'p_107', 'p_134', 'p_166', 'p_119', 'p_145', 'p_136', 'p_139', 'p_144', 'p_106', 'p_118', 'p_193', 'p_129'],

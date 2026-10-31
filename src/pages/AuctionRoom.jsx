@@ -105,7 +105,7 @@ const AuctionRoom = () => {
    const celebrationAudioRef = useRef(null);
    const fallbackAudioRef = useRef(null);
    const redirectedToLobbyRef = useRef(false);
-   const [newTimerValue, setNewTimerValue] = useState(currentAuction?.settings?.bidTimer || 10);
+   const [newTimerValue, setNewTimerValue] = useState(currentAuction?.settings?.bidTimer || 25);
    const [optimisticState, setOptimisticState] = useState(null);
    const [joiningTeam, setJoiningTeam] = useState(null);
    const [banError, setBanError] = useState(null);
@@ -804,7 +804,7 @@ const AuctionRoom = () => {
          highBidderId: user?.uid,
          highBidderName: user?.displayName || 'Manager',
          highBidderTeamId: team?.teamId,
-         timerEndsAt: getSyncedTime() + (currentAuction?.settings?.bidTimer || 10) * 1000
+         timerEndsAt: getSyncedTime() + (currentAuction?.settings?.bidTimer || 25) * 1000
       });
 
       try {
@@ -816,6 +816,13 @@ const AuctionRoom = () => {
       } finally {
          setIsBiddingInFlight(false);
       }
+   };
+
+   const voteToSkip = async (kind) => {
+      try {
+         const response = await fetch(`/api/hotspot-vote/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.uid, playerId: displayAuctionState?.playerId, kind }) });
+         if (!response.ok) throw new Error(await response.text());
+      } catch (err) { setError(err.message); setTimeout(() => setError(''), 3000); }
    };
 
    const copyRoomId = () => {
@@ -980,6 +987,11 @@ const AuctionRoom = () => {
    return (
       <div className="h-screen-safe bg-[#0d0d0d] text-white font-sans flex flex-col items-center overflow-hidden">
          {currentAuction?.isLocal && <RetainedRtmPanel roomTeams={roomTeams} userId={user?.uid} />}
+         {currentAuction?.isLocal && displayAuctionState?.status === 'bidding' && <div className="fixed bottom-20 right-3 z-[80] flex flex-col gap-2 items-end">
+            <button disabled={!!displayAuctionState.highBidderId || displayAuctionState.skipVotes?.includes(user?.uid)} onClick={() => voteToSkip('player')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-bold disabled:opacity-50">Skip player ({displayAuctionState.skipVotes?.length || 0}/2)</button>
+            {!currentAuction.reauction && <button disabled={!!displayAuctionState.highBidderId || displayAuctionState.roundSkipVotes?.includes(user?.uid)} onClick={() => voteToSkip('round')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-bold disabled:opacity-50">Skip remaining set ({displayAuctionState.roundSkipVotes?.length || 0}/2)</button>}
+            <span className="text-xs text-white bg-black/80 rounded px-2">Both must agree before bidding</span>
+         </div>}
 
          <header className="w-full h-14 compact:h-12 bg-black/40 backdrop-blur-md border-b border-white/5 flex flex-row items-center justify-between px-2.5 sm:px-4 md:px-6 z-50 gap-2 shrink-0">
             <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">

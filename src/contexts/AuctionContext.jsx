@@ -62,7 +62,6 @@ import {
   fillLocalEmptyTeamsWithBots as fillLocalEmptyTeamsWithBotsEngine,
   removeLocalBotTeam as removeLocalBotTeamEngine,
   startLocalAuction as startLocalAuctionEngine,
-  placeLocalBid as placeLocalBidEngine,
   endLocalPlayerAuction as endLocalPlayerAuctionEngine,
   pauseLocalAuction as pauseLocalAuctionEngine,
   resumeLocalAuction as resumeLocalAuctionEngine,
@@ -1325,13 +1324,12 @@ export const AuctionProvider = ({ children }) => {
     }
 
     if (currentAuction.server === 'local' || isHotspotRoomCode(currentAuction.id)) {
-      return placeLocalBidEngine(
-        currentAuction.id,
-        user.uid,
-        team.teamId,
-        user.displayName || 'Manager',
-        team.teamName,
-      );
+      const response = await fetch(`/api/hotspot-bid/${encodeURIComponent(currentAuction.id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid, playerId: currentAuction.currentAuction?.playerId }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
     }
 
     // ── Bug Fix 1: Budget pre-flight check OUTSIDE the transaction ──

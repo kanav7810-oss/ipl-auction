@@ -58,14 +58,6 @@ export async function fetchRoomFromServer(roomId) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.id) {
-        memoryStore.set(roomId, data);
-        if (typeof window !== 'undefined' && window.localStorage) {
-          try {
-            window.localStorage.setItem(getLocalRoomKey(roomId), JSON.stringify(data));
-          } catch {
-            // Ignore storage errors
-          }
-        }
         return data;
       }
     }
@@ -212,7 +204,7 @@ export function createLocalRoom(
   const budget = isSprint5 ? 60.0 : isSprint11 ? 90.0 : 120.0;
   const squadLimit = isSprint5 ? 5 : isSprint11 ? 11 : 25;
   const overseasLimit = isSprint5 ? 2 : isSprint11 ? 4 : 8;
-  const settings = { bidTimer: 10, budget };
+  const settings = { bidTimer: 25, budget };
 
   const teamDetails = TEAMS.find((t) => t.id === playerDetails.team);
 
@@ -317,7 +309,7 @@ export async function joinLocalRoomDb(roomId, userId, playerDetails) {
       createdAt: Date.now(),
       players: [],
       bannedPlayers: [],
-      settings: { bidTimer: 10, budget },
+      settings: { bidTimer: 25, budget },
       teams: {},
       live: { status: 'waiting' },
       messages: [],
@@ -466,7 +458,7 @@ export function startLocalAuction(roomId) {
     highBidderId: '',
     highBidderName: 'No Bids',
     highBidderTeamId: '',
-    timerEndsAt: Date.now() + 15000,
+    timerEndsAt: Date.now() + 25000,
     status: 'bidding',
   };
 
@@ -514,7 +506,7 @@ export function placeLocalBid(roomId, userId, teamId, userName, teamName) {
     throw new Error('Insufficient purse budget');
   }
 
-  const timerSec = room.settings?.bidTimer || 10;
+  const timerSec = room.settings?.bidTimer || 25;
   room.live.currentBid = nextBid;
   room.live.highBidderId = userId;
   room.live.highBidderName = userName || 'Manager';
@@ -583,9 +575,24 @@ export function endLocalPlayerAuction(roomId) {
   if (!room || !room.live || room.live.status !== 'bidding') return;
 
   const now = Date.now();
-  if (room.live.timerEndsAt && now < room.live.timerEndsAt) return;
+  const voters = room.players?.map(p => p.id) || [];
+  const roundSkip = voters.length === 2 && voters.every(id => room.live.roundSkipVotes?.includes(id));
+  const playerSkip = voters.length === 2 && voters.every(id => room.live.skipVotes?.includes(id));
+  if (!roundSkip && !playerSkip && room.live.timerEndsAt && now < room.live.timerEndsAt) return;
 
-  const isSold = Boolean(room.live.highBidderId);
+  const isSold = !roundSkip && !playerSkip && Boolean(room.live.highBidderId);
+  if (!isSold && !room.reauction) {
+    room.unsoldIndices ||= [];
+    const index = IPL_PLAYERS.findIndex(p => p.id === room.live.playerId);
+    if (index >= 0 && !room.unsoldIndices.includes(index)) room.unsoldIndices.push(index);
+  }
+  if (roundSkip && !room.reauction) {
+    const position = room.playerOrder.findIndex(i => IPL_PLAYERS[i]?.id === room.live.playerId);
+    const set = IPL_PLAYERS[room.playerOrder[position]]?.set;
+    let end = position + 1;
+    while (end < room.playerOrder.length && IPL_PLAYERS[room.playerOrder[end]]?.set === set) end++;
+    room.unsoldIndices.push(...room.playerOrder.splice(position + 1, end - position - 1));
+  }
   room.live.status = isSold ? 'sold' : 'unsold';
 
   const player = IPL_PLAYERS.find((p) => p.id === room.live.playerId);
@@ -662,12 +669,12 @@ export function endLocalPlayerAuction(roomId) {
 
     const currentPlayerId = current.live.playerId;
     const order = current.playerOrder || Array.from({ length: IPL_PLAYERS.length }, (_, i) => i);
-    const currentIndex = order.findIndex((idx) => IPL_PLAYERS[idx] && IPL_PLAYERS[idx].id === currentPlayerId);
+    const currentIndex = current.reauction ? order.findLastIndex((idx) => IPL_PLAYERS[idx]?.id === currentPlayerId) : order.findIndex((idx) => IPL_PLAYERS[idx]?.id === currentPlayerId);
     const nextIndex = currentIndex !== -1 ? order[currentIndex + 1] : order[0];
 
     if (nextIndex !== undefined && IPL_PLAYERS[nextIndex]) {
       const nextPlayer = IPL_PLAYERS[nextIndex];
-      const timerSec = current.settings?.bidTimer || 10;
+      const timerSec = current.settings?.bidTimer || 25;
       current.live = {
         playerId: nextPlayer.id,
         currentBid: 0,
@@ -677,6 +684,12 @@ export function endLocalPlayerAuction(roomId) {
         timerEndsAt: Date.now() + timerSec * 1000,
         status: 'bidding',
       };
+    } else if (!current.reauction && current.unsoldIndices?.length) {
+      current.reauction = true;
+      current.playerOrder.push(...current.unsoldIndices);
+      const nextPlayer = IPL_PLAYERS[current.unsoldIndices[0]];
+      current.live = { playerId: nextPlayer.id, currentBid: 0, highBidderId: '', highBidderName: 'No Bids', highBidderTeamId: '', timerEndsAt: Date.now() + (current.settings?.bidTimer || 25) * 1000, status: 'bidding' };
+      current.messages.push({ id: `msg_reauction_${Date.now()}`, userId: 'system', userName: 'System', text: 'Unsold players return for a final auction.', type: 'log', timestamp: Date.now() });
     } else {
       current.status = 'completed';
       current.live = {
@@ -726,7 +739,7 @@ export function resumeLocalAuction(roomId) {
   const room = readLocalRoom(roomId);
   if (!room || !room.live) return;
 
-  const timerSec = room.settings?.bidTimer || 10;
+  const timerSec = room.settings?.bidTimer || 25;
   room.live.status = 'bidding';
   room.live.timerEndsAt = Date.now() + timerSec * 1000;
 
@@ -923,6 +936,8 @@ export function subscribeLocalRoom(
   fetchRoomFromServer(roomId).then((serverData) => {
     if (!isSubscribed) return;
     if (serverData) {
+      memoryStore.set(roomId, serverData);
+      if (typeof window !== 'undefined' && window.localStorage) window.localStorage.setItem(getLocalRoomKey(roomId), JSON.stringify(serverData));
       pushStateToContext(serverData);
     } else if (!readLocalRoom(roomId)) {
       // If room truly does not exist on server either, initialize template
@@ -967,7 +982,7 @@ export function subscribeLocalRoom(
       }
       pushStateToContext(serverState);
     }
-  }, 1200);
+  }, 250);
 
   // Local storage storage-event listener
   const onStorage = (event) => {
@@ -994,14 +1009,10 @@ export function subscribeLocalRoom(
     window.addEventListener('hotspot-room-update', onLocalSync);
   }
 
-  // Presence heartbeat
+  // Update presence on the bridge without replacing the auction state.
   const presenceInterval = setInterval(() => {
-    if (!isSubscribed) return;
-    const room = readLocalRoom(roomId);
-    if (room) {
-      if (!room.presences) room.presences = {};
-      room.presences[userId] = { online: true, lastSeen: Date.now() };
-      writeLocalRoom(roomId, room);
+    if (typeof window !== 'undefined' && window.fetch) {
+      fetch(`/api/hotspot-presence/${encodeURIComponent(roomId)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) }).catch(() => {});
     }
   }, 4000);
 
@@ -1018,7 +1029,8 @@ export function subscribeLocalRoom(
     const now = Date.now();
 
     // 1. Timer Expiry Check
-    if (live.timerEndsAt && now >= live.timerEndsAt) {
+    const voters = room.players?.map(p => p.id) || [];
+    if ((voters.length === 2 && (voters.every(id => live.skipVotes?.includes(id)) || voters.every(id => live.roundSkipVotes?.includes(id)))) || (live.timerEndsAt && now >= live.timerEndsAt)) {
       endLocalPlayerAuction(roomId);
       return;
     }
@@ -1036,7 +1048,7 @@ export function subscribeLocalRoom(
     if (lastBotCycle === cycleKey) return;
     lastBotCycle = cycleKey;
 
-    const timerSec = room.settings?.bidTimer || 10;
+    const timerSec = room.settings?.bidTimer || 25;
     const timerMs = timerSec * 1000;
     const remainingMs = Math.max(0, live.timerEndsAt - now);
     const cBid = live.currentBid || 0;

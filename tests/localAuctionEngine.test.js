@@ -139,3 +139,53 @@ test('pauseLocalAuction, resumeLocalAuction, and endLocalAuction manage room lif
   assert.equal(room.live.status, 'completed');
 });
 
+
+test('both skip votes defer a player and bring unsold players back once', async () => {
+  const roomId = 'HOTSPOT-SKIP';
+  createLocalRoom(roomId, 'host', { team: 'MI' });
+  await joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
+  startLocalAuction(roomId);
+  const room = readLocalRoom(roomId);
+  const first = room.playerOrder[0];
+  const second = room.playerOrder.find(index => IPL_PLAYERS[index].set !== IPL_PLAYERS[first].set);
+  room.playerOrder = [first, second];
+  room.live.skipVotes = ['host', 'guest'];
+  const originalSetTimeout = globalThis.setTimeout;
+  try {
+    globalThis.setTimeout = callback => { callback(); return 0; };
+    endLocalPlayerAuction(roomId);
+    assert.equal(readLocalRoom(roomId).live.playerId, IPL_PLAYERS[second].id);
+    readLocalRoom(roomId).live.timerEndsAt = 0;
+    endLocalPlayerAuction(roomId);
+    const finalPass = readLocalRoom(roomId);
+    assert.equal(finalPass.reauction, true);
+    assert.equal(finalPass.live.playerId, IPL_PLAYERS[first].id);
+    assert.equal(finalPass.settings.bidTimer, 25);
+    finalPass.live.timerEndsAt = 0;
+    endLocalPlayerAuction(roomId);
+    assert.equal(readLocalRoom(roomId).live.playerId, IPL_PLAYERS[second].id);
+    readLocalRoom(roomId).live.timerEndsAt = 0;
+    endLocalPlayerAuction(roomId);
+    assert.equal(readLocalRoom(roomId).status, 'completed');
+  } finally { globalThis.setTimeout = originalSetTimeout; }
+});
+
+test('both set-skip votes defer the rest of the current set', async () => {
+  const roomId = 'HOTSPOT-SET-SKIP';
+  createLocalRoom(roomId, 'host', { team: 'MI' });
+  await joinLocalRoomDb(roomId, 'guest', { team: 'CSK' });
+  startLocalAuction(roomId);
+  const room = readLocalRoom(roomId);
+  const first = room.playerOrder[0];
+  const same = room.playerOrder.find(i => i !== first && IPL_PLAYERS[i].set === IPL_PLAYERS[first].set);
+  const next = room.playerOrder.find(i => IPL_PLAYERS[i].set !== IPL_PLAYERS[first].set);
+  room.playerOrder = [first, same, next];
+  room.live.roundSkipVotes = ['host', 'guest'];
+  const originalSetTimeout = globalThis.setTimeout;
+  try {
+    globalThis.setTimeout = callback => { callback(); return 0; };
+    endLocalPlayerAuction(roomId);
+    assert.equal(readLocalRoom(roomId).live.playerId, IPL_PLAYERS[next].id);
+    assert.deepEqual(readLocalRoom(roomId).unsoldIndices, [first, same]);
+  } finally { globalThis.setTimeout = originalSetTimeout; }
+});
