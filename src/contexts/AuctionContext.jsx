@@ -56,13 +56,13 @@ import {
 import { isHotspotRoomCode } from '../lib/roomCodes';
 import {
   createLocalRoom,
+  getHotspotTime,
   joinLocalRoomDb as joinLocalRoomDbEngine,
   subscribeLocalRoom,
   updateLocalPlayerTeam as updateLocalPlayerTeamEngine,
   fillLocalEmptyTeamsWithBots as fillLocalEmptyTeamsWithBotsEngine,
   removeLocalBotTeam as removeLocalBotTeamEngine,
   startLocalAuction as startLocalAuctionEngine,
-  endLocalPlayerAuction as endLocalPlayerAuctionEngine,
   pauseLocalAuction as pauseLocalAuctionEngine,
   resumeLocalAuction as resumeLocalAuctionEngine,
   endLocalAuction as endLocalAuctionEngine,
@@ -141,7 +141,7 @@ export const AuctionProvider = ({ children }) => {
   // getServerTime() returns Date.now() + serverOffset, synced across all clients.
   const getSyncedTime = useCallback(() => {
     if (currentAuction?.server === 'local' || isHotspotRoomCode(currentAuction?.id)) {
-      return Date.now();
+      return getHotspotTime();
     }
     return getServerTime();
   }, [currentAuction?.server, currentAuction?.id]);
@@ -512,7 +512,7 @@ export const AuctionProvider = ({ children }) => {
 
   const endPlayerAuction = useCallback(async (roomId) => {
     if (isHotspotRoomCode(roomId) || currentAuction?.server === 'local') {
-      return endLocalPlayerAuctionEngine(roomId);
+      return; // The hotspot bridge owns timer and settlement transitions.
     }
 
     // Prevent duplicate calls from the timer interval

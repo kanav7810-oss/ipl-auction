@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { IPL_PLAYERS } from './src/data/players.js'
+import { tickHotspotAuction, decideHotspotRtm } from './src/lib/hotspotAuctionState.js'
 
 // Lightweight in-memory bridge for Hotspot/Offline play.
 // Allows normal tabs, incognito windows, and LAN/Wi-Fi devices to share local room state
@@ -12,8 +13,29 @@ function hotspotSyncPlugin() {
   return {
     name: 'hotspot-sync-middleware',
     configureServer(server) {
+      const tick = setInterval(() => {
+        for (const room of localRooms.values()) if (tickHotspotAuction(room)) room._revision = (room._revision || 0) + 1;
+      }, 200);
+      server.httpServer?.once('close', () => clearInterval(tick));
       server.middlewares.use((req, res, next) => {
         const url = req.url || '';
+        if (url.startsWith('/api/hotspot-')) res.setHeader('X-Hotspot-Time', String(Date.now()));
+        if (url.startsWith('/api/hotspot-rtm/')) {
+          const roomId = decodeURIComponent(url.slice('/api/hotspot-rtm/'.length).split('?')[0]);
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const { userId, playerId, useRtm } = JSON.parse(body);
+              if (typeof useRtm !== 'boolean') throw new Error('Invalid RTM decision');
+              const room = localRooms.get(roomId);
+              decideHotspotRtm(room, userId, playerId, useRtm);
+              room._revision = (room._revision || 0) + 1;
+              res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(room));
+            } catch (error) { res.statusCode = 400; res.end(error.message); }
+          });
+          return;
+        }
         if (url.startsWith('/api/hotspot-bid/')) {
           const roomId = decodeURIComponent(url.slice('/api/hotspot-bid/'.length).split('?')[0]);
           let body = '';
@@ -33,6 +55,7 @@ function hotspotSyncPlugin() {
               if (player.country !== 'IND' && team.squad.filter(p => IPL_PLAYERS.find(item => item.id === p.id)?.country !== 'IND').length >= room.overseasLimit) throw new Error('Overseas limit reached');
               const manager = room.players.find(p => p.id === userId);
               Object.assign(live, { currentBid: bid, highBidderId: userId, highBidderName: manager.name, highBidderTeamId: team.teamId, timerEndsAt: Date.now() + (room.settings?.bidTimer || 25) * 1000, skipVotes: [], roundSkipVotes: [] });
+              room._revision = (room._revision || 0) + 1;
               room.messages ||= []; room.messages.push({ id: `msg_bid_${Date.now()}_${userId}`, userId, userName: manager.name, text: `Bid ₹${bid} Cr by ${team.teamName}`, type: 'bid', timestamp: Date.now() });
               res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(room));
             } catch (error) { res.statusCode = 400; res.end(error.message); }
@@ -64,6 +87,7 @@ function hotspotSyncPlugin() {
               if (!room || !room.players?.some(p => p.id === userId) || room.live?.playerId !== playerId || room.live.status !== 'bidding' || room.live.highBidderId || !['player', 'round'].includes(kind) || (kind === 'round' && room.reauction)) throw new Error('Vote is no longer available');
               const key = kind === 'round' ? 'roundSkipVotes' : 'skipVotes';
               room.live[key] = [...new Set([...(room.live[key] || []), userId])];
+              room._revision = (room._revision || 0) + 1;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify(room));
             } catch (error) { res.statusCode = 400; res.end(error.message); }
@@ -93,13 +117,18 @@ function hotspotSyncPlugin() {
               try {
                 const parsed = JSON.parse(body);
                 const previous = localRooms.get(roomId);
+                if (previous && (parsed._revision || 0) !== (previous._revision || 0)) {
+                  res.statusCode = 409; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(previous)); return;
+                }
                 if (previous?.live?.playerId === parsed.live?.playerId && previous.live.status === 'bidding' && parsed.live.status === 'bidding' && !parsed.live.highBidderId) {
                   for (const key of ['skipVotes', 'roundSkipVotes']) parsed.live[key] = [...new Set([...(previous.live[key] || []), ...(parsed.live[key] || [])])];
                 }
+                if (previous?.status === 'waiting' && parsed.status === 'active' && parsed.live?.status === 'bidding') parsed.live.timerEndsAt = Date.now() + (parsed.settings?.bidTimer || 25) * 1000;
+                parsed._revision = (previous?._revision || 0) + 1;
                 localRooms.set(roomId, parsed);
                 res.setHeader('Content-Type', 'application/json');
                 res.statusCode = 200;
-                res.end(JSON.stringify({ success: true }));
+                res.end(JSON.stringify(parsed));
               } catch {
                 res.statusCode = 400;
                 res.end(JSON.stringify({ error: 'Invalid JSON' }));

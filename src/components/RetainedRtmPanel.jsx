@@ -12,7 +12,7 @@ export default function RetainedRtmPanel({ roomTeams, userId }) {
     {open && <div className="fixed inset-0 z-[120] bg-black/70" onClick={() => setOpen(false)}>
       <aside role="dialog" aria-modal="true" aria-label="Retained and RTM" className="h-full w-full max-w-lg overflow-y-auto bg-[#111318] p-5 text-white shadow-2xl" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between"><h2 className="text-xl font-bold">Retained &amp; RTM</h2><button className="rounded-lg p-2" onClick={() => setOpen(false)} aria-label="Close">✕</button></div>
-        <p className="mt-2 text-sm text-gray-400">RTM is display-only; players remain in the auction pool.</p>
+        <p className="mt-2 text-sm text-gray-400">Each team may use RTM once to match a winning bid on an eligible player. Eligible players stay in the pool.</p>
         {teams.map((team, index) => <section key={index} className="mt-5 rounded-xl border border-white/10 p-4">
           <h3 className="font-bold">{index === 0 ? 'Team A · Kohli' : 'Team B · Dhawan'} {team?.userId === userId ? '(you)' : ''}{team ? ` — ${team.teamName}` : ' — waiting'}</h3>
           {team && <>
@@ -20,7 +20,7 @@ export default function RetainedRtmPanel({ roomTeams, userId }) {
             <h4 className="mt-4 font-semibold">Retained</h4><ul className="text-sm text-gray-300">{team.squad?.filter(p => p.retained).map(p => <li key={p.id}>{names.get(p.id)}</li>)}</ul>
             <h4 className="mt-4 font-semibold">Bought</h4><ul className="text-sm text-gray-300">{team.squad?.filter(p => !p.retained).map(p => <li key={p.id}>{names.get(p.id)} · ₹{p.bid} Cr</li>)}</ul>
             {!team.squad?.some(p => !p.retained) && <p className="text-sm text-gray-400">None yet</p>}
-            <h4 className="mt-4 font-semibold">RTM eligible</h4><ul className="space-y-1 text-sm text-gray-300">{team.rtm?.eligible.map(id => { const owner = ownerOf(id); const purchase = owner?.squad.find(p => p.id === id); return <li key={id} className="flex justify-between gap-3"><span>{names.get(id)}</span><span className="text-gray-400">{!owner ? 'In pool' : owner.userId === team.userId ? 'Yours' : `Sold ${purchase.bid} Cr · RTM open`}</span></li>; })}</ul>
+            <h4 className="mt-4 font-semibold">RTM eligible</h4><ul className="space-y-1 text-sm text-gray-300">{team.rtm?.eligible.map(id => { const owner = ownerOf(id); const purchase = owner?.squad.find(p => p.id === id); return <li key={id} className="flex justify-between gap-3"><span>{names.get(id)}</span><span className="text-gray-400">{!owner ? 'In pool' : owner.userId === team.userId ? 'Yours' : `Sold ${purchase.bid} Cr`}</span></li>; })}</ul>
           </>}
         </section>)}
       </aside>

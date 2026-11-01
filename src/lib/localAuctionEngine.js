@@ -23,6 +23,8 @@ const LOCAL_STORAGE_PREFIX = 'ipl-auction:local-room:';
 const memoryStore = new Map();
 
 let activeSupabase = null;
+let hotspotClockOffset = 0;
+export const getHotspotTime = () => Date.now() + hotspotClockOffset;
 
 export function setSupabaseClient(client) {
   activeSupabase = client;
@@ -39,11 +41,20 @@ export function getLocalRoomKey(roomId) {
 export async function syncRoomToServer(roomId, roomData) {
   if (typeof window === 'undefined' || !window.fetch) return;
   try {
-    await fetch(`/api/hotspot-room/${encodeURIComponent(roomId)}`, {
+    const response = await fetch(`/api/hotspot-room/${encodeURIComponent(roomId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(roomData),
     });
+    if (response.ok || response.status === 409) {
+      const state = await response.json();
+      const local = readLocalRoom(roomId);
+      if (!local || (state._revision || 0) >= (local._revision || 0)) {
+        memoryStore.set(roomId, state);
+        try { window.localStorage?.setItem(getLocalRoomKey(roomId), JSON.stringify(state)); } catch { /* storage disabled */ }
+        window.dispatchEvent(new CustomEvent('hotspot-room-update', { detail: { roomId, state } }));
+      }
+    }
   } catch {
     // Ignore fetch errors (e.g. offline or static server)
   }
@@ -55,7 +66,10 @@ export async function syncRoomToServer(roomId, roomData) {
 export async function fetchRoomFromServer(roomId) {
   if (typeof window === 'undefined' || !window.fetch) return null;
   try {
+    const started = Date.now();
     const res = await fetch(`/api/hotspot-room/${encodeURIComponent(roomId)}`);
+    const serverTime = Number(res.headers.get('X-Hotspot-Time'));
+    if (serverTime > 0) hotspotClockOffset = serverTime - (started + Date.now()) / 2;
     if (res.ok) {
       const data = await res.json();
       if (data && data.id) {
@@ -975,6 +989,7 @@ export function subscribeLocalRoom(
     if (!isSubscribed || !serverState) return;
 
     const localState = readLocalRoom(roomId);
+    if ((serverState._revision || 0) < (localState?._revision || 0)) return;
     if (!localState || JSON.stringify(serverState) !== JSON.stringify(localState)) {
       memoryStore.set(roomId, serverState);
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -1025,7 +1040,7 @@ export function subscribeLocalRoom(
   const hostEngineInterval = setInterval(() => {
     if (!isSubscribed) return;
     const room = readLocalRoom(roomId);
-    if (!room || room.hostId !== userId) return;
+    if (!room || room.hostId !== userId || (typeof window !== 'undefined' && window.fetch)) return;
 
     const live = room.live;
     if (!live || live.status !== 'bidding') return;

@@ -48,6 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TEAMS } from '../data/teams';
 import TextChat from '../components/TextChat';
 import RetainedRtmPanel from '../components/RetainedRtmPanel';
+import CurrentRoundPanel from '../components/CurrentRoundPanel';
 import PageLoader from '../components/PageLoader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import useRoomServer from '../hooks/useRoomServer';
@@ -117,10 +118,10 @@ const AuctionRoom = () => {
 
    // Clear optimistic state when DB catches up
    useEffect(() => {
-      if (optimisticState && currentAuction?.currentAuction?.currentBid >= optimisticState.currentBid) {
+      if (optimisticState && (currentAuction?.currentAuction?.playerId !== optimisticState.playerId || currentAuction?.currentAuction?.status !== 'bidding' || currentAuction?.currentAuction?.currentBid >= optimisticState.currentBid)) {
          setOptimisticState(null);
       }
-   }, [currentAuction?.currentAuction?.currentBid, optimisticState]);
+   }, [currentAuction?.currentAuction, optimisticState]);
 
    const displayAuctionState = optimisticState || currentAuction?.currentAuction;
 
@@ -129,6 +130,11 @@ const AuctionRoom = () => {
    const configuredBidTimer = toFiniteNumber(currentAuction?.settings?.bidTimer, 10);
    const timerTotal = configuredBidTimer > 0 ? configuredBidTimer : 10;
    const isTimerBidding = displayAuctionState?.status === 'bidding';
+   useEffect(() => {
+      if (displayAuctionState?.status !== 'rtm') return;
+      const interval = setInterval(() => setTimerTick(tick => tick + 1), 250);
+      return () => clearInterval(interval);
+   }, [displayAuctionState?.status]);
    const isTimerPaused = displayAuctionState?.status === 'paused';
    const rawSecondsRemaining = isTimerBidding && displayAuctionState?.timerEndsAt
       ? Math.ceil((displayAuctionState.timerEndsAt - getSyncedTime()) / 1000)
@@ -446,15 +452,18 @@ const AuctionRoom = () => {
 
       const playerOrder = currentAuction?.playerOrder || Array.from({ length: IPL_PLAYERS.length }, (_, i) => i);
       const currentPlayerId = displayAuctionState?.playerId;
-      const currentPlayerIndexInOrder = playerOrder.indexOf(IPL_PLAYERS.findIndex(p => p.id === currentPlayerId));
+      const currentPlayerIndexInOrder = currentAuction?.reauction ? playerOrder.findLastIndex(i => IPL_PLAYERS[i]?.id === currentPlayerId) : playerOrder.findIndex(i => IPL_PLAYERS[i]?.id === currentPlayerId);
 
       const upcoming = [];
       const sold = [];
       const unsold = [];
 
+      const seen = new Set();
       playerOrder.forEach((idx, i) => {
          const p = IPL_PLAYERS[idx];
-         if (!p) return;
+         if (!p || seen.has(p.id)) return;
+         if (currentAuction?.reauction && !soldIds.has(p.id) && i < currentPlayerIndexInOrder && playerOrder.slice(currentPlayerIndexInOrder).includes(idx)) return;
+         seen.add(p.id);
          if (soldIds.has(p.id)) {
             sold.push({ ...p, ...soldWithBids[p.id] });
          } else if (i < currentPlayerIndexInOrder) {
@@ -465,7 +474,7 @@ const AuctionRoom = () => {
       });
 
       return { upcoming, sold, unsold };
-   }, [currentAuction?.playerOrder, displayAuctionState?.playerId, roomTeams]);
+   }, [currentAuction?.playerOrder, currentAuction?.reauction, displayAuctionState?.playerId, roomTeams]);
 
    const filteredPlayers = useMemo(() => {
       let players = [];
@@ -825,6 +834,13 @@ const AuctionRoom = () => {
       } catch (err) { setError(err.message); setTimeout(() => setError(''), 3000); }
    };
 
+   const decideRtm = async (useRtm) => {
+      try {
+         const response = await fetch(`/api/hotspot-rtm/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.uid, playerId: displayAuctionState?.playerId, useRtm }) });
+         if (!response.ok) throw new Error(await response.text());
+      } catch (err) { setError(err.message); setTimeout(() => setError(''), 3000); }
+   };
+
    const copyRoomId = () => {
       navigator.clipboard.writeText(id);
       setCopied(true);
@@ -987,6 +1003,10 @@ const AuctionRoom = () => {
    return (
       <div className="h-screen-safe bg-[#0d0d0d] text-white font-sans flex flex-col items-center overflow-hidden">
          {currentAuction?.isLocal && <RetainedRtmPanel roomTeams={roomTeams} userId={user?.uid} />}
+         {currentAuction?.isLocal && displayAuctionState?.status === 'rtm' && <div role="status" className="fixed inset-x-3 top-16 z-[110] mx-auto max-w-lg rounded-2xl border border-orange-400 bg-[#19120b] p-4 text-white shadow-2xl">
+            <p className="font-bold">RTM decision: {currentPlayer?.name} · ₹{formatCrores(displayAuctionState.currentBid)} Cr</p>
+            {displayAuctionState.rtmEligibleUserId === user?.uid ? <><p className="mt-1 text-sm text-gray-300">Match the winning bid? {Math.max(0, Math.ceil((displayAuctionState.rtmEndsAt - getSyncedTime()) / 1000))} seconds left. You can use one RTM.</p><div className="mt-3 flex gap-2"><button className="flex-1 rounded-xl bg-orange-600 p-3 font-bold" onClick={() => decideRtm(true)}>Raise RTM</button><button className="flex-1 rounded-xl bg-white/10 p-3 font-bold" onClick={() => decideRtm(false)}>Pass</button></div></> : <p className="mt-1 text-sm text-gray-300">Waiting for the other team’s RTM decision: {Math.max(0, Math.ceil((displayAuctionState.rtmEndsAt - getSyncedTime()) / 1000))} seconds left.</p>}
+         </div>}
          {currentAuction?.isLocal && displayAuctionState?.status === 'bidding' && <div className="fixed bottom-20 right-3 z-[80] flex flex-col gap-2 items-end">
             <button disabled={!!displayAuctionState.highBidderId || displayAuctionState.skipVotes?.includes(user?.uid)} onClick={() => voteToSkip('player')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-bold disabled:opacity-50">Skip player ({displayAuctionState.skipVotes?.length || 0}/2)</button>
             {!currentAuction.reauction && <button disabled={!!displayAuctionState.highBidderId || displayAuctionState.roundSkipVotes?.includes(user?.uid)} onClick={() => voteToSkip('round')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-bold disabled:opacity-50">Skip remaining set ({displayAuctionState.roundSkipVotes?.length || 0}/2)</button>}
@@ -1212,6 +1232,7 @@ const AuctionRoom = () => {
             </aside>
 
             <div className={`${mobileTab === 'arena' ? 'flex' : 'hidden'} md:flex flex-col flex-1 h-full overflow-hidden`}>
+               {currentAuction?.isLocal && <CurrentRoundPanel room={currentAuction} live={displayAuctionState} />}
                {/* Center Fixed Header */}
                <div className="min-h-12 border-b border-white/5 bg-white/[0.01] flex items-center px-2.5 sm:px-6 md:px-8 w-full shrink-0 py-2 md:py-0 overflow-x-auto no-scrollbar">
                   <div className="w-full max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4 min-w-0">
@@ -1343,7 +1364,7 @@ const AuctionRoom = () => {
                                  </div>
                                  <div className="p-4 sm:p-6 lg:p-5 xl:p-10 flex flex-col lg:flex-row items-center gap-4 sm:gap-6 lg:gap-5 xl:gap-10">
                                     <div className="w-28 h-28 sm:w-36 sm:h-36 lg:w-36 lg:h-48 xl:w-60 xl:h-80 bg-gradient-to-b from-white/10 to-transparent rounded-2xl sm:rounded-[2rem] overflow-hidden border border-white/10 relative z-10 shadow-[0_12px_40px_rgba(0,0,0,0.4)] group hover:scale-[1.02] transition-transform duration-500 shrink-0">
-                                       <img src={currentPlayer.image} alt={currentPlayer.name} decoding="async" className="w-full h-full object-cover" />
+                                       <img src={currentPlayer.image || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentPlayer.name)}`} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentPlayer.name)}`; }} alt={currentPlayer.name} decoding="async" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="flex-1 min-w-0 flex flex-col gap-4 xl:gap-6 w-full text-center lg:text-left">
                                        <div>
